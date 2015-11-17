@@ -1,5 +1,6 @@
 package org.luceat.wu.mods.skillmod;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -16,6 +17,9 @@ import org.gotti.wurmunlimited.modloader.interfaces.WurmMod;
 public class SkillMod implements WurmMod, Configurable, PreInitable {
     private boolean useSkillMod = true;
     private boolean removePriestPenalty = true;
+    private final String modifyFightSkillMethodName = "modifyFightSkill";
+    private final String modifyFightSkillMethodDesc = "()Z";
+    private final String setKnowledgeMethodName = "setKnowledge";
     private Logger logger = Logger.getLogger(this.getClass().getName());
     HashMap<String, Float> skillFactors = new HashMap<>();
 
@@ -46,8 +50,14 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
 
     @Override
     public void preInit() {
-        if(useSkillMod)
+        if(useSkillMod) {
             modifySkillSystem();
+            float fightingFactor = skillFactors.get("Fighting");
+            logger.log(Level.INFO, "Fighting factor is: " + fightingFactor);
+            if (fightingFactor != 1.0F){
+                modifyFightingSkillGain((double) fightingFactor);
+            }
+        }
     }
 
     private void modifySkillSystem() {
@@ -119,6 +129,7 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
                         codeIterator.writeByte(Bytecode.LDC_W, pos);
                         codeIterator.write16bit(newRef, pos+1);
                         modifyNextLDC = false;
+                        logger.log(Level.INFO, "Modified skill " + currentSkill + " it now has difficulty " + newLdcFloat);
                     }
                 }
                 //This is weapon smithing :<
@@ -137,7 +148,9 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
                             codeIterator.writeByte(Bytecode.LDC2_W, pos);
                             codeIterator.write16bit(newRef, pos+1);
                             modifyNextLDC = false;
+                            logger.log(Level.INFO, "Modified skill " + currentSkill + " it now has difficulty " + newLdcFloat);
                         }
+
                         if (wsCount < 2)
                             modifyNextLDC = true;
                     }
@@ -146,6 +159,62 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
                     //Sets priestpenalty to false instead of true.
                     codeIterator.writeByte(Bytecode.ICONST_0, pos-1);
                     logger.log(Level.INFO, "Removed a priest penalty.");
+                }
+            }
+
+            mi.rebuildStackMap(cp);
+
+
+        } catch (NotFoundException e) {
+            throw new HookException(e);
+        } catch (BadBytecode e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void modifyFightingSkillGain(double skillFactor){
+        try{
+            logger.log(Level.INFO, "Going to modify fighting skill gain with factor: " + skillFactor);
+            ClassPool cp = HookManager.getInstance().getClassPool();
+            CtClass creatureClass = cp.get("com.wurmonline.server.creatures.Creature");
+
+            MethodInfo mi = creatureClass.getMethod(modifyFightSkillMethodName, modifyFightSkillMethodDesc).getMethodInfo();
+            CodeAttribute ca = mi.getCodeAttribute();
+            ConstPool constPool= ca.getConstPool();
+            int ref = constPool.addDoubleInfo(skillFactor);
+
+            CodeIterator codeIterator = ca.iterator();
+
+
+            while(codeIterator.hasNext()) {
+
+                int pos = codeIterator.next();
+                int op = codeIterator.byteAt(pos);
+                int ldcRef = codeIterator.u16bitAt(pos+1);
+                int nextOp = codeIterator.byteAt(pos+3);
+
+                //Try to find the bytecode-pattern
+                if (op == CodeIterator.LDC2_W && nextOp == CodeIterator.DMUL) {
+                    Object ldcObject = constPool.getLdcValue(ldcRef);
+
+                    if (!(ldcObject instanceof Double))
+                        continue;
+
+                    double ldcValue = (double) ldcObject;
+
+                    logger.log(Level.INFO, "Found ldcValue of: " + ldcValue);
+                    if(ldcValue  == 0.25D ) {
+                        //Insert gap before the call and add instructions:
+                        //LDC2_W refToDouble 1 + 2 bytes
+                        //DMUL 1 byte
+                        logger.log(Level.INFO, "Found bytecode pattern where to inject fightFactor");
+                        codeIterator.insertGap(pos + 4, 4);
+                        codeIterator.writeByte(Bytecode.LDC2_W, pos + 4);
+                        codeIterator.write16bit(ref, pos + 5);
+                        codeIterator.writeByte(Bytecode.DMUL, pos + 7);
+                        logger.log(Level.INFO, "Finished injecting");
+                        break;
+                    }
                 }
             }
 
