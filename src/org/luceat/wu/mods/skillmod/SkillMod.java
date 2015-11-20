@@ -17,8 +17,12 @@ import org.gotti.wurmunlimited.modloader.interfaces.WurmMod;
 public class SkillMod implements WurmMod, Configurable, PreInitable {
     private boolean useSkillMod = true;
     private boolean removePriestPenalty = true;
+    private double lowerStatDivider = 5.0D;
+    private double upperStatDivider = 45.0D;
     private final String modifyFightSkillMethodName = "modifyFightSkill";
     private final String modifyFightSkillMethodDesc = "()Z";
+    private final String checkAdvanceMethodName = "checkAdvance";
+    private final String checkAdvanceMethodDesc = "(DLcom/wurmonline/server/items/Item;DZFZD)D";
     private final String setKnowledgeMethodName = "setKnowledge";
     private Logger logger = Logger.getLogger(this.getClass().getName());
     HashMap<String, Float> skillFactors = new HashMap<>();
@@ -29,6 +33,8 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
 
         useSkillMod = Boolean.valueOf(properties.getProperty("useSkillMod", Boolean.toString(useSkillMod)));
         removePriestPenalty = Boolean.valueOf(properties.getProperty("removePriestPenalty", Boolean.toString(removePriestPenalty)));
+        lowerStatDivider = Double.valueOf(properties.getProperty("lowerStatDivider", Double.toString(lowerStatDivider)));
+        upperStatDivider = Double.valueOf(properties.getProperty("upperStatDivider", Double.toString(upperStatDivider)));
         logger.log(Level.INFO, "useSkillMod: " + useSkillMod);
         logger.log(Level.INFO, "statFactor: " + removePriestPenalty);
 
@@ -38,7 +44,9 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
             if (!(  key.contentEquals("useSkillMod") ||
                     key.contentEquals("removePriestPenalty") ||
                     key.contentEquals("classpath") ||
-                    key.contentEquals("classname"))) {
+                    key.contentEquals("classname") || 
+                    key.contentEquals("lowerStatDivider") ||
+                    key.contentEquals("upperStatDivider"))) {
                 Float value = new Float((String) entry.getValue());
                 skillFactors.put(key, value);
             }
@@ -56,6 +64,9 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
             logger.log(Level.INFO, "Fighting factor is: " + fightingFactor);
             if (fightingFactor != 1.0F){
                 modifyFightingSkillGain((double) fightingFactor);
+            }
+            if (lowerStatDivider != 5.0D || upperStatDivider != 45.0D){
+                changeStatDividers();
             }
         }
     }
@@ -224,6 +235,66 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
         } catch (NotFoundException e) {
             throw new HookException(e);
         } catch (BadBytecode e) {
+            e.printStackTrace();
+        }
+    }
+    
+    private void changeStatDividers(){
+        try{
+            logger.log(Level.INFO, "Going to modify stat divider below 31 to: " + lowerStatDivider + ", and stat modifier above 31 to: " + upperStatDivider);
+            ClassPool cp = HookManager.getInstance().getClassPool();
+            CtClass skillClass = cp.get("com.wurmonline.server.skills.Skill");
+
+            MethodInfo mi = skillClass.getMethod(checkAdvanceMethodName, checkAdvanceMethodDesc).getMethodInfo();
+            CodeAttribute ca = mi.getCodeAttribute();
+            ConstPool constPool= ca.getConstPool();
+            int ref1 = constPool.addDoubleInfo(lowerStatDivider);
+            int ref2 = constPool.addDoubleInfo(upperStatDivider);
+            boolean doneLower = false;
+            boolean doneUpper = false;
+
+            CodeIterator codeIterator = ca.iterator();
+            while(codeIterator.hasNext()) {
+
+                int pos = codeIterator.next();
+                int op = codeIterator.byteAt(pos);
+                int ldcRef = codeIterator.u16bitAt(pos+1);
+                int nextOp = codeIterator.byteAt(pos+3);
+
+                //Try to find the bytecode-pattern
+                if (op == CodeIterator.LDC2_W && nextOp == CodeIterator.DSTORE) {
+                    Object ldcObject = constPool.getLdcValue(ldcRef);
+
+                    if (!(ldcObject instanceof Double))
+                        continue;
+
+                    double ldcValue = (double) ldcObject;
+
+                    logger.log(Level.INFO, "Found ldcValue of: " + ldcValue);
+                    if(ldcValue  == 5.0D ) {
+                        logger.log(Level.INFO, "Found bytecode pattern where to replace lower stat divider");
+                        codeIterator.write16bit(ref1, pos + 1);
+                        logger.log(Level.INFO, "Injected Lower");
+                        doneLower = true;
+                    }
+                    else if(ldcValue  == 45.0D ) {
+                        logger.log(Level.INFO, "Found bytecode pattern where to replace upper stat divider");
+                        codeIterator.write16bit(ref2, pos + 1);
+                        logger.log(Level.INFO, "Injected Upper");
+                        doneUpper = true;
+                    }
+                    if (doneLower && doneUpper){
+                        break;
+                    }
+                }
+            }
+            mi.rebuildStackMap(cp);
+        }
+        catch(NotFoundException e)
+        {
+            throw new HookException(e);
+        }
+        catch(BadBytecode e){
             e.printStackTrace();
         }
     }
