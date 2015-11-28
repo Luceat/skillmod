@@ -100,48 +100,44 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
                     if(ldcValue instanceof String) {
                         String ldcString = (String) ldcValue;
                         skillFactor = skillFactors.get(ldcString);
-                        if (skillFactor != null){
+                        if (skillFactor != null && skillFactor != 1.0F){
                             modifyNextLDC = true;
                             currentSkill = ldcString;
                         }
                     }
                     //Else, change the difficulty
-                    else if (ldcValue instanceof Float){
+                    else if (ldcValue instanceof Float && modifyNextLDC){
                         Float ldcFloat = (Float) ldcValue;
-                        if(modifyNextLDC){
-                            modifyNextLDC = false;
-                            float newLdcFloat = (ldcFloat / skillFactor);
-                            int newRef = constPool.addFloatInfo(newLdcFloat);
+                        modifyNextLDC = false;
+                        float newLdcFloat = (ldcFloat / skillFactor);
+                        int newRef = constPool.addFloatInfo(newLdcFloat);
 
-                            //Unclear if 256 is the true break for switching LDC_W. Be careful if you copy this.
-                            if( newRef < 256) {
-                                codeIterator.writeByte(Bytecode.LDC, pos);
-                                codeIterator.writeByte(newRef, pos + 1);
-                            } else {
-                                codeIterator.insertGap(pos, 1);
-                                codeIterator.writeByte(Bytecode.LDC_W, pos);
-                                codeIterator.write16bit(newRef, pos+1);
-                            }
-                            logger.log(Level.INFO, "Modified skill " + currentSkill + " it now has difficulty " + newLdcFloat);
-
+                        //Unclear if 256 is the true break for switching LDC_W. Be careful if you copy this.
+                        if( newRef < 256) {
+                            codeIterator.writeByte(Bytecode.LDC, pos);
+                            codeIterator.writeByte(newRef, pos + 1);
+                        } else {
+                            codeIterator.insertGap(pos, 1);
+                            codeIterator.writeByte(Bytecode.LDC_W, pos);
+                            codeIterator.write16bit(newRef, pos+1);
                         }
+                        logger.log(Level.INFO, "Modified skill " + currentSkill + " it now has difficulty " + newLdcFloat);
                     }
-
                 }
                 //Some floats are already picked up by op LDC_W
-                else if(op == CodeIterator.LDC_W && modifyNextLDC){
+                else if(op == CodeIterator.LDC_W){
                     int constRef = codeIterator.u16bitAt(pos+1);
 
                     Object ldcValue = constPool.getLdcValue(constRef);
                     if(ldcValue instanceof String) {
                         String ldcString = (String) ldcValue;
                         skillFactor = skillFactors.get(ldcString);
-                        if (skillFactor != null){
+                        if (skillFactor != null && skillFactor != 1.0F){
                             modifyNextLDC = true;
                             currentSkill = ldcString;
                         }
                     }
-                    else if(ldcValue instanceof Float){
+                    else if(ldcValue instanceof Float && modifyNextLDC){
 
                         float newLdcFloat = ((Float) ldcValue / skillFactor);
                         int newRef = constPool.addFloatInfo(newLdcFloat);
