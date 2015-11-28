@@ -60,9 +60,10 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
     public void preInit() {
         if(useSkillMod) {
             modifySkillSystem();
-            float fightingFactor = skillFactors.get("Fighting");
-            logger.log(Level.INFO, "Fighting factor is: " + fightingFactor);
-            if (fightingFactor != 1.0F){
+
+            Float fightingFactor = skillFactors.get("Fighting");
+            if (fightingFactor != null && fightingFactor != 1.0F){
+                logger.log(Level.INFO, "Fighting factor is: " + fightingFactor);
                 modifyFightingSkillGain((double) fightingFactor);
             }
             if (lowerStatDivider != 5.0D || upperStatDivider != 45.0D){
@@ -132,7 +133,15 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
                     int constRef = codeIterator.u16bitAt(pos+1);
 
                     Object ldcValue = constPool.getLdcValue(constRef);
-                    if(ldcValue instanceof Float){
+                    if(ldcValue instanceof String) {
+                        String ldcString = (String) ldcValue;
+                        skillFactor = skillFactors.get(ldcString);
+                        if (skillFactor != null){
+                            modifyNextLDC = true;
+                            currentSkill = ldcString;
+                        }
+                    }
+                    else if(ldcValue instanceof Float){
 
                         float newLdcFloat = ((Float) ldcValue / skillFactor);
                         int newRef = constPool.addFloatInfo(newLdcFloat);
