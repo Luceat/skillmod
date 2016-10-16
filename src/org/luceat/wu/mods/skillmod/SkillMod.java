@@ -20,7 +20,7 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
     private double lowerStatDivider = 5.0D;
     private double upperStatDivider = 45.0D;
     private final String modifyFightSkillMethodName = "modifyFightSkill";
-    private final String modifyFightSkillMethodDesc = "()Z";
+    private final String modifyFightSkillMethodDesc = "(II)Z";
     private final String checkAdvanceMethodName = "checkAdvance";
     private final String checkAdvanceMethodDesc = "(DLcom/wurmonline/server/items/Item;DZFZD)D";
     private final String setKnowledgeMethodName = "setKnowledge";
