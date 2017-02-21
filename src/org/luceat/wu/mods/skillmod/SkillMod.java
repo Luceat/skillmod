@@ -10,10 +10,10 @@ import org.gotti.wurmunlimited.modloader.classhooks.HookException;
 import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
 import org.gotti.wurmunlimited.modloader.interfaces.Configurable;
 import org.gotti.wurmunlimited.modloader.interfaces.PreInitable;
-import org.gotti.wurmunlimited.modloader.interfaces.WurmMod;
+import org.gotti.wurmunlimited.modloader.interfaces.WurmServerMod;
 
 
-public class SkillMod implements WurmMod, Configurable, PreInitable {
+public class SkillMod implements WurmServerMod, Configurable, PreInitable {
     private boolean useSkillMod = true;
     private boolean removePriestPenalty = true;
     private Logger logger = Logger.getLogger(this.getClass().getName());
@@ -77,34 +77,23 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
                     Object ldcValue = constPool.getLdcValue(constRef);
                     if(ldcValue instanceof String) {
                         String ldcString = (String) ldcValue;
-                        skillFactor = skillFactors.get(ldcString);
-                        if (skillFactor != null){
-                            modifyNextLDC = true;
-                            currentSkill = ldcString;
-                        }
+                        skillFactor = skillFactors.get(ldcString) != null ? skillFactors.get(ldcString) : 1.0F;
+                        modifyNextLDC = true;
+                        currentSkill = ldcString;
                     }
                     //Else, change the difficulty
-                    else if (ldcValue instanceof Float){
+                    else if (ldcValue instanceof Float && modifyNextLDC){
                         Float ldcFloat = (Float) ldcValue;
-                        if(modifyNextLDC){
-                            modifyNextLDC = false;
-                            float newLdcFloat = (ldcFloat / skillFactor);
-                            int newRef = constPool.addFloatInfo(newLdcFloat);
-
-                            //Unclear if 256 is the true break for switching LDC_W. Be careful if you copy this.
-                            if( newRef < 256) {
-                                codeIterator.writeByte(Bytecode.LDC, pos);
-                                codeIterator.writeByte(newRef, pos + 1);
-                            } else {
-                                codeIterator.insertGap(pos, 1);
-                                codeIterator.writeByte(Bytecode.LDC_W, pos);
-                                codeIterator.write16bit(newRef, pos+1);
-                            }
+                        modifyNextLDC = false;
+                        float newLdcFloat = modifySkill(constPool, codeIterator, skillFactor, pos, ldcFloat);
+                        if(skillFactor != 1.0) {
                             logger.log(Level.INFO, "Modified skill " + currentSkill + " it now has difficulty " + newLdcFloat);
-
+                        }
+                        if(currentSkill.contentEquals("Weapon smithing") && wsCount < 2){
+                            wsCount++;
+                            modifyNextLDC = true;
                         }
                     }
-
                 }
                 //Some floats are already picked up by op LDC_W
                 else if(op == CodeIterator.LDC_W && modifyNextLDC){
@@ -119,27 +108,6 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
                         codeIterator.writeByte(Bytecode.LDC_W, pos);
                         codeIterator.write16bit(newRef, pos+1);
                         modifyNextLDC = false;
-                    }
-                }
-                //This is weapon smithing :<
-                else if(op == CodeIterator.LDC2_W && modifyNextLDC){
-
-                    if(currentSkill.contentEquals("Weapon smithing")) {
-                        wsCount++;
-                        logger.log(Level.INFO, "Modifying special skill Weapon smithing");
-                        int constRef = codeIterator.u16bitAt(pos+1);
-                        Object ldcValue = constPool.getLdcValue(constRef);
-                        if(ldcValue instanceof Long){
-
-                            Float newLdcFloat = ( ((Long) ldcValue).floatValue() / skillFactor);
-                            int newRef = constPool.addLongInfo(newLdcFloat.longValue());
-
-                            codeIterator.writeByte(Bytecode.LDC2_W, pos);
-                            codeIterator.write16bit(newRef, pos+1);
-                            modifyNextLDC = false;
-                        }
-                        if (wsCount < 2)
-                            modifyNextLDC = true;
                     }
                 }
                 else if(op == CodeIterator.PUTFIELD && removePriestPenalty){
@@ -157,5 +125,21 @@ public class SkillMod implements WurmMod, Configurable, PreInitable {
         } catch (BadBytecode e) {
             e.printStackTrace();
         }
+    }
+
+    private float modifySkill(ConstPool constPool, CodeIterator codeIterator, Float skillFactor, int pos, Float ldcFloat) throws BadBytecode {
+        float newLdcFloat = (ldcFloat / skillFactor);
+        int newRef = constPool.addFloatInfo(newLdcFloat);
+
+        //Unclear if 256 is the true break for switching LDC_W. Be careful if you copy this.
+        if( newRef < 256) {
+            codeIterator.writeByte(Bytecode.LDC, pos);
+            codeIterator.writeByte(newRef, pos + 1);
+        } else {
+            codeIterator.insertGap(pos, 1);
+            codeIterator.writeByte(Bytecode.LDC_W, pos);
+            codeIterator.write16bit(newRef, pos+1);
+        }
+        return newLdcFloat;
     }
 }

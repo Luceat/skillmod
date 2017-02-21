@@ -1,0 +1,14 @@
+<component name="ArtifactManager">
+  <artifact build-on-make="true" name="skillmod:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/skillmod_jar</output-path>
+    <root id="root">
+      <element id="archive" name="skillmod.jar">
+        <element id="module-output" name="skillmod" />
+      </element>
+      <element id="library" level="project" name="modlauncher" />
+      <element id="library" level="project" name="javassist" />
+      <element id="library" level="project" name="modlauncher1" />
+      <element id="library" level="project" name="server" />
+    </root>
+  </artifact>
+</component>
