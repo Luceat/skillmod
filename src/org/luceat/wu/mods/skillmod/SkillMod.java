@@ -45,9 +45,14 @@ public class SkillMod implements WurmServerMod, Configurable, PreInitable {
                     key.contentEquals("classpath") ||
                     key.contentEquals("classname") || 
                     key.contentEquals("lowerStatDivider") ||
-                    key.contentEquals("upperStatDivider"))) {
-                Float value = new Float((String) entry.getValue());
-                skillFactors.put(key, value);
+                    key.contentEquals("upperStatDivider") ||
+                    key.contentEquals("steamVersion"))) {
+                try {
+                    Float value = new Float((String) entry.getValue());
+                    skillFactors.put(key, value);
+                }catch (NumberFormatException e){
+                    logger.log(Level.WARNING, "Non number value for skill: " + key);
+                }
             }
         }
 
